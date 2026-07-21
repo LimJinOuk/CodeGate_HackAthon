@@ -22,6 +22,9 @@ import com.example.codegate.user.repository.UserAccountRepository;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
+
+import java.util.Map;
 
 @Service
 public class AuthService {
@@ -34,6 +37,7 @@ public class AuthService {
     private final PasswordService passwordService;
     private final JwtTokenService jwtTokenService;
     private final HospitalProfileParser hospitalProfileParser;
+    private final PendingPatientSignupStore pendingPatientSignupStore;
 
     public AuthService(
             KakaoOAuthClient kakaoOAuthClient,
@@ -43,7 +47,8 @@ public class AuthService {
             CryptoService cryptoService,
             PasswordService passwordService,
             JwtTokenService jwtTokenService,
-            HospitalProfileParser hospitalProfileParser
+            HospitalProfileParser hospitalProfileParser,
+            PendingPatientSignupStore pendingPatientSignupStore
     ) {
         this.kakaoOAuthClient = kakaoOAuthClient;
         this.userAccountRepository = userAccountRepository;
@@ -53,6 +58,7 @@ public class AuthService {
         this.passwordService = passwordService;
         this.jwtTokenService = jwtTokenService;
         this.hospitalProfileParser = hospitalProfileParser;
+        this.pendingPatientSignupStore = pendingPatientSignupStore;
     }
 
     public KakaoLoginUrlResponse createKakaoLoginUrl(String redirectUri, String state) {
@@ -61,10 +67,7 @@ public class AuthService {
 
     @Transactional
     public LoginResponse signupPatientWithKakao(PatientKakaoSignupRequest request) {
-        KakaoUserInfo kakaoUserInfo = kakaoOAuthClient.getUserInfoByAuthorizationCode(request.code(), request.redirectUri());
-
-        UserAccount userAccount = userAccountRepository.findByKakaoId(kakaoUserInfo.kakaoId())
-                .orElseGet(() -> userAccountRepository.save(UserAccount.kakaoPatient(kakaoUserInfo.kakaoId())));
+        UserAccount userAccount = resolvePatientSignupUserAccount(request);
 
         if (userAccount.getRole() != UserRole.PATIENT) {
             throw new BusinessException(HttpStatus.CONFLICT, "INVALID_ACCOUNT_ROLE", "일반 사용자 계정으로 가입할 수 없는 계정입니다.");
@@ -87,21 +90,60 @@ public class AuthService {
         return loginResponse(userAccount);
     }
 
-    @Transactional(readOnly = true)
+    @Transactional(noRollbackFor = BusinessException.class)
     public LoginResponse loginPatientWithKakao(KakaoLoginRequest request) {
         KakaoUserInfo kakaoUserInfo = kakaoOAuthClient.getUserInfoByAuthorizationCode(request.code(), request.redirectUri());
 
         UserAccount userAccount = userAccountRepository.findByKakaoId(kakaoUserInfo.kakaoId())
-                .orElseThrow(() -> new BusinessException(HttpStatus.NOT_FOUND, "PATIENT_SIGNUP_REQUIRED", "일반 사용자 추가 회원가입이 필요합니다."));
+                .orElseGet(() -> userAccountRepository.save(UserAccount.kakaoPatient(kakaoUserInfo.kakaoId())));
 
         if (userAccount.getRole() != UserRole.PATIENT) {
             throw new BusinessException(HttpStatus.UNAUTHORIZED, "LOGIN_FAILED", "일반 사용자 계정이 아닙니다.");
         }
 
         patientProfileRepository.findByUserAccount(userAccount)
-                .orElseThrow(() -> new BusinessException(HttpStatus.NOT_FOUND, "PATIENT_PROFILE_REQUIRED", "일반 사용자 추가 회원가입 정보가 필요합니다."));
+                .orElseThrow(() -> signupRequired(userAccount));
 
         return loginResponse(userAccount);
+    }
+
+    private UserAccount resolvePatientSignupUserAccount(PatientKakaoSignupRequest request) {
+        if (StringUtils.hasText(request.signupToken())) {
+            Long userAccountId = pendingPatientSignupStore.consume(request.signupToken())
+                    .orElseThrow(() -> new BusinessException(
+                            HttpStatus.BAD_REQUEST,
+                            "PATIENT_SIGNUP_TOKEN_EXPIRED",
+                            "추가 회원가입 인증 정보가 만료되었습니다. 카카오 로그인을 다시 진행해 주세요."
+                    ));
+            return userAccountRepository.findById(userAccountId)
+                    .orElseThrow(() -> new BusinessException(
+                            HttpStatus.BAD_REQUEST,
+                            "PATIENT_SIGNUP_TOKEN_INVALID",
+                            "추가 회원가입 인증 정보가 올바르지 않습니다."
+                    ));
+        }
+
+        if (!StringUtils.hasText(request.code()) || !StringUtils.hasText(request.redirectUri())) {
+            throw new BusinessException(
+                    HttpStatus.BAD_REQUEST,
+                    "KAKAO_SIGNUP_AUTH_REQUIRED",
+                    "카카오 인가 코드 또는 추가 회원가입 토큰이 필요합니다."
+            );
+        }
+
+        KakaoUserInfo kakaoUserInfo = kakaoOAuthClient.getUserInfoByAuthorizationCode(request.code(), request.redirectUri());
+        return userAccountRepository.findByKakaoId(kakaoUserInfo.kakaoId())
+                .orElseGet(() -> userAccountRepository.save(UserAccount.kakaoPatient(kakaoUserInfo.kakaoId())));
+    }
+
+    private BusinessException signupRequired(UserAccount userAccount) {
+        String signupToken = pendingPatientSignupStore.create(userAccount.getId());
+        return new BusinessException(
+                HttpStatus.NOT_FOUND,
+                "PATIENT_SIGNUP_REQUIRED",
+                "일반 사용자 추가 회원가입이 필요합니다.",
+                Map.of("signupToken", signupToken)
+        );
     }
 
     @Transactional

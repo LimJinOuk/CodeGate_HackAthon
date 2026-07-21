@@ -1,5 +1,7 @@
 package com.example.codegate.global;
 
+import java.util.Map;
+
 public record ApiResponse<T>(
         boolean success,
         T data,
@@ -14,6 +16,14 @@ public record ApiResponse<T>(
         return new ApiResponse<>(false, null, new ErrorBody(code, message));
     }
 
-    public record ErrorBody(String code, String message) {
+    public static ApiResponse<Void> error(String code, String message, Map<String, Object> details) {
+        return new ApiResponse<>(false, null, new ErrorBody(code, message, details));
+    }
+
+    public record ErrorBody(String code, String message, Map<String, Object> details) {
+
+        public ErrorBody(String code, String message) {
+            this(code, message, Map.of());
+        }
     }
 }

@@ -10,8 +10,9 @@ import jakarta.validation.constraints.Size;
 import java.time.LocalDate;
 
 public record PatientKakaoSignupRequest(
-        @NotBlank String code,
-        @NotBlank String redirectUri,
+        String code,
+        String redirectUri,
+        String signupToken,
         @NotBlank @Size(max = 50) String name,
         @NotNull Gender gender,
         @NotNull @Past LocalDate birthDate,

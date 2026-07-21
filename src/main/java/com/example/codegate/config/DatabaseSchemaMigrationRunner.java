@@ -5,9 +5,9 @@ import com.example.codegate.reservation.domain.District;
 import com.example.codegate.reservation.support.HospitalProfileParser;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
+import org.springframework.dao.CannotAcquireLockException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
-import org.springframework.transaction.annotation.Transactional;
 
 import javax.sql.DataSource;
 import java.sql.Connection;
@@ -23,6 +23,7 @@ import java.util.Set;
 @Component
 public class DatabaseSchemaMigrationRunner implements ApplicationRunner {
 
+    private static final int MAX_LOCK_RETRY_ATTEMPTS = 3;
     private static final String OLD_SLOT_UNIQUE_INDEX = "uk_slot_hospital_department_datetime";
     private static final String NEW_SLOT_UNIQUE_INDEX = "uk_slot_hospital_datetime";
 
@@ -39,17 +40,34 @@ public class DatabaseSchemaMigrationRunner implements ApplicationRunner {
     }
 
     @Override
-    @Transactional
     public void run(ApplicationArguments args) throws Exception {
         if (!isMySql()) {
             return;
         }
 
+        runWithLockRetry(this::runMigrations);
+    }
+
+    private void runMigrations() {
         normalizeLegacyEnumValues();
         migrateScheduleSlotUniqueConstraint();
         backfillHospitalDistricts();
         backfillHospitalDepartments();
         migrateReservationStatusColumns();
+    }
+
+    private void runWithLockRetry(MigrationAction action) throws Exception {
+        for (int attempt = 1; ; attempt++) {
+            try {
+                action.run();
+                return;
+            } catch (CannotAcquireLockException exception) {
+                if (attempt >= MAX_LOCK_RETRY_ATTEMPTS) {
+                    throw exception;
+                }
+                Thread.sleep(200L * attempt);
+            }
+        }
     }
 
     private boolean isMySql() throws Exception {
@@ -236,6 +254,7 @@ public class DatabaseSchemaMigrationRunner implements ApplicationRunner {
                     update reservations
                     set approved_at = coalesce(approved_at, decided_at)
                     where status = 'APPROVED' and decided_at is not null
+                      and approved_at is null
                     """);
         }
 
@@ -244,6 +263,7 @@ public class DatabaseSchemaMigrationRunner implements ApplicationRunner {
                     update reservations
                     set rejected_at = coalesce(rejected_at, decided_at)
                     where status = 'REJECTED' and decided_at is not null
+                      and rejected_at is null
                     """);
         }
 
@@ -252,6 +272,7 @@ public class DatabaseSchemaMigrationRunner implements ApplicationRunner {
                     update reservations
                     set canceled_at = coalesce(canceled_at, decided_at)
                     where status = 'CANCELED' and decided_at is not null
+                      and canceled_at is null
                     """);
         }
 
@@ -260,6 +281,7 @@ public class DatabaseSchemaMigrationRunner implements ApplicationRunner {
                     update reservations
                     set hospital_memo = coalesce(hospital_memo, decision_message)
                     where status in ('APPROVED', 'REJECTED') and decision_message is not null
+                      and hospital_memo is null
                     """);
         }
 
@@ -271,6 +293,7 @@ public class DatabaseSchemaMigrationRunner implements ApplicationRunner {
                     update reservations
                     set cancel_reason = %s
                     where status = 'CANCELED'
+                      and cancel_reason is null
                     """.formatted(messageExpression));
         }
 
@@ -332,5 +355,10 @@ public class DatabaseSchemaMigrationRunner implements ApplicationRunner {
     }
 
     private record HospitalDepartmentRow(Long hospitalId, String medicalSubjects) {
+    }
+
+    @FunctionalInterface
+    private interface MigrationAction {
+        void run() throws Exception;
     }
 }
