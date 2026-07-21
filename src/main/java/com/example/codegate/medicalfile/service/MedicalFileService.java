@@ -1,10 +1,14 @@
 package com.example.codegate.medicalfile.service;
 
+import com.example.codegate.medicalfile.dto.MedicalFileContentResponse;
 import com.example.codegate.medicalfile.dto.MedicalFileUploadResponse;
+import com.example.codegate.medicalfile.dto.MedicalFileResponse;
 import com.example.codegate.medicalfile.entity.MedicalFile;
 import com.example.codegate.medicalfile.entity.MedicalFileType;
 import com.example.codegate.medicalfile.repository.MedicalFileRepository;
+import com.example.codegate.medicalfile.support.MedicalFileErrors;
 import com.example.codegate.user.entity.UserAccount;
+import org.springframework.core.io.PathResource;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionSynchronization;
@@ -12,6 +16,7 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
 import org.springframework.web.multipart.MultipartFile;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 @Service
 public class MedicalFileService {
@@ -29,6 +34,31 @@ public class MedicalFileService {
         this.storageService = storageService;
         this.ocrTransactionService = ocrTransactionService;
         this.ocrProcessingService = ocrProcessingService;
+    }
+
+    @Transactional(readOnly = true)
+    public List<MedicalFileResponse> findMine(UserAccount patient) {
+        return medicalFileRepository.findByPatientOrderByCreatedAtDesc(patient)
+                .stream()
+                .map(MedicalFileResponse::from)
+                .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public MedicalFileContentResponse findContentMine(UserAccount patient, Long medicalFileId) {
+        MedicalFile medicalFile = medicalFileRepository.findByIdAndPatient(medicalFileId, patient)
+                .orElseThrow(MedicalFileErrors::medicalFileNotFound);
+        PathResource resource = new PathResource(storageService.resolveForRead(medicalFile.getStoragePath()));
+        if (!resource.exists() || !resource.isReadable()) {
+            throw MedicalFileErrors.medicalFileNotFound();
+        }
+
+        return new MedicalFileContentResponse(
+                medicalFile.getOriginalFileName(),
+                medicalFile.getContentType(),
+                medicalFile.getFileSize(),
+                resource
+        );
     }
 
     @Transactional

@@ -21,8 +21,8 @@ import java.util.UUID;
 @Service
 public class LocalMedicalFileStorageService {
 
-    private static final Set<String> CHECKUP_EXTENSIONS = Set.of("pdf", "jpg", "jpeg", "png");
-    private static final Set<String> IMAGE_EXTENSIONS = Set.of("jpg", "jpeg", "png", "dcm", "pdf");
+    private static final Set<String> CHECKUP_EXTENSIONS = Set.of("pdf");
+    private static final Set<String> IMAGE_EXTENSIONS = Set.of("jpg", "jpeg", "png", "dcm", "pdf", "mp4");
 
     private final Path rootDir;
     private final long maxFileSizeBytes;

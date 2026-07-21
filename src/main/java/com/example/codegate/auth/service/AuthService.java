@@ -79,7 +79,7 @@ public class AuthService {
                 });
 
         String encryptedResidentNumber = cryptoService.encrypt(request.residentRegistrationNumber().replace("-", ""));
-        patientProfileRepository.save(new PatientProfile(
+        PatientProfile patientProfile = patientProfileRepository.save(new PatientProfile(
                 userAccount,
                 request.name(),
                 request.gender(),
@@ -87,7 +87,7 @@ public class AuthService {
                 encryptedResidentNumber
         ));
 
-        return loginResponse(userAccount);
+        return loginResponse(userAccount, patientProfile.getName());
     }
 
     @Transactional(noRollbackFor = BusinessException.class)
@@ -101,10 +101,10 @@ public class AuthService {
             throw new BusinessException(HttpStatus.UNAUTHORIZED, "LOGIN_FAILED", "일반 사용자 계정이 아닙니다.");
         }
 
-        patientProfileRepository.findByUserAccount(userAccount)
+        PatientProfile patientProfile = patientProfileRepository.findByUserAccount(userAccount)
                 .orElseThrow(() -> signupRequired(userAccount));
 
-        return loginResponse(userAccount);
+        return loginResponse(userAccount, patientProfile.getName());
     }
 
     private UserAccount resolvePatientSignupUserAccount(PatientKakaoSignupRequest request) {
@@ -155,7 +155,7 @@ public class AuthService {
         UserAccount userAccount = userAccountRepository.save(
                 UserAccount.hospitalLocal(request.loginId(), passwordService.hash(request.password()))
         );
-        hospitalRepository.save(new Hospital(
+        Hospital hospital = hospitalRepository.save(new Hospital(
                 userAccount,
                 request.hospitalName(),
                 request.hospitalLocation(),
@@ -165,7 +165,7 @@ public class AuthService {
                 resolveDepartments(request.departments(), request.medicalSubjects())
         ));
 
-        return loginResponse(userAccount);
+        return loginResponse(userAccount, hospital.getHospitalName());
     }
 
     @Transactional(readOnly = true)
@@ -177,15 +177,19 @@ public class AuthService {
             throw new BusinessException(HttpStatus.UNAUTHORIZED, "LOGIN_FAILED", "아이디 또는 비밀번호가 올바르지 않습니다.");
         }
 
-        return loginResponse(userAccount);
+        Hospital hospital = hospitalRepository.findByUserAccount(userAccount)
+                .orElseThrow(() -> new BusinessException(HttpStatus.INTERNAL_SERVER_ERROR, "HOSPITAL_PROFILE_NOT_FOUND", "병원 프로필을 찾을 수 없습니다."));
+
+        return loginResponse(userAccount, hospital.getHospitalName());
     }
 
-    private LoginResponse loginResponse(UserAccount userAccount) {
+    private LoginResponse loginResponse(UserAccount userAccount, String userName) {
         return new LoginResponse(
                 jwtTokenService.createToken(userAccount.getId(), userAccount.getRole()),
                 "Bearer",
                 userAccount.getId(),
-                userAccount.getRole()
+                userAccount.getRole(),
+                userName
         );
     }
 
