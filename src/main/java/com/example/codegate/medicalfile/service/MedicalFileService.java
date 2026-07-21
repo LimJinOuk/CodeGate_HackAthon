@@ -7,6 +7,10 @@ import com.example.codegate.medicalfile.entity.MedicalFile;
 import com.example.codegate.medicalfile.entity.MedicalFileType;
 import com.example.codegate.medicalfile.repository.MedicalFileRepository;
 import com.example.codegate.medicalfile.support.MedicalFileErrors;
+import com.example.codegate.hospital.entity.Hospital;
+import com.example.codegate.reservation.domain.Reservation;
+import com.example.codegate.reservation.repository.ReservationRepository;
+import com.example.codegate.reservation.support.ReservationErrors;
 import com.example.codegate.user.entity.UserAccount;
 import org.springframework.core.io.PathResource;
 import org.springframework.stereotype.Service;
@@ -22,15 +26,18 @@ import java.util.List;
 public class MedicalFileService {
 
     private final MedicalFileRepository medicalFileRepository;
+    private final ReservationRepository reservationRepository;
     private final LocalMedicalFileStorageService storageService;
     private final MedicalFileOcrTransactionService ocrTransactionService;
     private final MedicalFileOcrProcessingService ocrProcessingService;
 
     public MedicalFileService(MedicalFileRepository medicalFileRepository,
+                              ReservationRepository reservationRepository,
                               LocalMedicalFileStorageService storageService,
                               MedicalFileOcrTransactionService ocrTransactionService,
                               MedicalFileOcrProcessingService ocrProcessingService) {
         this.medicalFileRepository = medicalFileRepository;
+        this.reservationRepository = reservationRepository;
         this.storageService = storageService;
         this.ocrTransactionService = ocrTransactionService;
         this.ocrProcessingService = ocrProcessingService;
@@ -47,6 +54,35 @@ public class MedicalFileService {
     @Transactional(readOnly = true)
     public MedicalFileContentResponse findContentMine(UserAccount patient, Long medicalFileId) {
         MedicalFile medicalFile = medicalFileRepository.findByIdAndPatient(medicalFileId, patient)
+                .orElseThrow(MedicalFileErrors::medicalFileNotFound);
+        PathResource resource = new PathResource(storageService.resolveForRead(medicalFile.getStoragePath()));
+        if (!resource.exists() || !resource.isReadable()) {
+            throw MedicalFileErrors.medicalFileNotFound();
+        }
+
+        return new MedicalFileContentResponse(
+                medicalFile.getOriginalFileName(),
+                medicalFile.getContentType(),
+                medicalFile.getFileSize(),
+                resource
+        );
+    }
+
+    @Transactional(readOnly = true)
+    public List<MedicalFileResponse> findForHospitalReservation(Hospital hospital, Long reservationId) {
+        Long patientId = requireHospitalReservationPatientId(hospital, reservationId);
+        return medicalFileRepository.findByPatient_IdOrderByCreatedAtDesc(patientId)
+                .stream()
+                .map(MedicalFileResponse::from)
+                .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public MedicalFileContentResponse findContentForHospitalReservation(Hospital hospital,
+                                                                        Long reservationId,
+                                                                        Long medicalFileId) {
+        Long patientId = requireHospitalReservationPatientId(hospital, reservationId);
+        MedicalFile medicalFile = medicalFileRepository.findByIdAndPatient_Id(medicalFileId, patientId)
                 .orElseThrow(MedicalFileErrors::medicalFileNotFound);
         PathResource resource = new PathResource(storageService.resolveForRead(medicalFile.getStoragePath()));
         if (!resource.exists() || !resource.isReadable()) {
@@ -98,5 +134,14 @@ public class MedicalFileService {
             return;
         }
         ocrProcessingService.processAsync(medicalFileId);
+    }
+
+    private Long requireHospitalReservationPatientId(Hospital hospital, Long reservationId) {
+        Reservation reservation = reservationRepository.findById(reservationId)
+                .orElseThrow(ReservationErrors::reservationNotFound);
+        if (!reservation.getHospitalId().equals(hospital.getId())) {
+            throw ReservationErrors.notOwnHospitalReservation();
+        }
+        return reservation.getPatientId();
     }
 }

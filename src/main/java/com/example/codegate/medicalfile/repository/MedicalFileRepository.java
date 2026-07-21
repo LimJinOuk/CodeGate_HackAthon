@@ -12,4 +12,8 @@ public interface MedicalFileRepository extends JpaRepository<MedicalFile, Long> 
     List<MedicalFile> findByPatientOrderByCreatedAtDesc(UserAccount patient);
 
     Optional<MedicalFile> findByIdAndPatient(Long id, UserAccount patient);
+
+    List<MedicalFile> findByPatient_IdOrderByCreatedAtDesc(Long patientId);
+
+    Optional<MedicalFile> findByIdAndPatient_Id(Long id, Long patientId);
 }
