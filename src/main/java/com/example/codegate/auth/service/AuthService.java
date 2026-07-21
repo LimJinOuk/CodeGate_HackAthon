@@ -84,7 +84,9 @@ public class AuthService {
                 request.name(),
                 request.gender(),
                 request.birthDate(),
-                encryptedResidentNumber
+                encryptedResidentNumber,
+                request.medications(),
+                request.diseases()
         ));
 
         return loginResponse(userAccount, patientProfile.getName());

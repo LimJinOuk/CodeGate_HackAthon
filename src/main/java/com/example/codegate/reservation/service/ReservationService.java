@@ -4,12 +4,15 @@ import com.example.codegate.hospital.entity.Hospital;
 import com.example.codegate.reservation.domain.Reservation;
 import com.example.codegate.reservation.domain.ReservationStatus;
 import com.example.codegate.reservation.domain.ScheduleSlot;
+import com.example.codegate.reservation.dto.PatientMedicalInfoResponse;
 import com.example.codegate.reservation.dto.ReservationCreateRequest;
 import com.example.codegate.reservation.dto.ReservationResponse;
 import com.example.codegate.reservation.repository.ReservationRepository;
 import com.example.codegate.reservation.repository.ScheduleSlotRepository;
 import com.example.codegate.reservation.support.ReservationErrors;
+import com.example.codegate.user.entity.PatientProfile;
 import com.example.codegate.user.entity.UserAccount;
+import com.example.codegate.user.repository.PatientProfileRepository;
 import com.example.codegate.user.repository.UserAccountRepository;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -33,13 +36,16 @@ public class ReservationService {
     private final ReservationRepository reservationRepository;
     private final ScheduleSlotRepository slotRepository;
     private final UserAccountRepository userAccountRepository;
+    private final PatientProfileRepository patientProfileRepository;
 
     public ReservationService(ReservationRepository reservationRepository,
                               ScheduleSlotRepository slotRepository,
-                              UserAccountRepository userAccountRepository) {
+                              UserAccountRepository userAccountRepository,
+                              PatientProfileRepository patientProfileRepository) {
         this.reservationRepository = reservationRepository;
         this.slotRepository = slotRepository;
         this.userAccountRepository = userAccountRepository;
+        this.patientProfileRepository = patientProfileRepository;
     }
 
     // ------------------------------------------------------------------ 사용자
@@ -154,6 +160,20 @@ public class ReservationService {
                 : reservationRepository.findByHospital_IdAndStatusAndReservationDateBetween(
                         hospital.getId(), status, from, to, pageable);
         return reservations.map(ReservationResponse::from);
+    }
+
+    /**
+     * 예약 건의 환자 의료 정보(복용약 / 질병) 조회.
+     *
+     * <p>회원가입 전에 만들어진 계정처럼 프로필이 없는 경우도 있어 빈 값으로 응답한다.
+     * 여기서 예외를 던지면 병원이 예약 자체를 처리하지 못하게 된다.</p>
+     */
+    @Transactional(readOnly = true)
+    public PatientMedicalInfoResponse findPatientMedicalInfo(Hospital hospital, Long reservationId) {
+        Reservation reservation = getHospitalReservation(hospital, reservationId);
+        PatientProfile profile = patientProfileRepository.findByUserAccount(reservation.getPatient())
+                .orElse(null);
+        return PatientMedicalInfoResponse.from(reservation, profile);
     }
 
     /** 병원 승인 → 예약 최종 확정 */
