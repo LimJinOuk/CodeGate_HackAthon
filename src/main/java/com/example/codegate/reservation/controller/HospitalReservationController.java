@@ -3,6 +3,7 @@ package com.example.codegate.reservation.controller;
 import com.example.codegate.global.ApiResponse;
 import com.example.codegate.hospital.entity.Hospital;
 import com.example.codegate.reservation.dto.DecisionRequest;
+import com.example.codegate.reservation.dto.PatientMedicalInfoResponse;
 import com.example.codegate.reservation.dto.ReservationResponse;
 import com.example.codegate.reservation.dto.SlotBulkCreateRequest;
 import com.example.codegate.reservation.dto.SlotCreateRequest;
@@ -113,6 +114,15 @@ public class HospitalReservationController {
                 fromDate,
                 toDate,
                 pageRequest(page, size, Sort.by("reservationDate").ascending().and(Sort.by("startTime").ascending()))));
+    }
+
+    /** 예약 환자의 의료 정보 (복용 중인 약 / 앓고 있는 질병) */
+    @GetMapping("/reservations/{reservationId}/patient")
+    public ApiResponse<PatientMedicalInfoResponse> patientMedicalInfo(
+            @RequestHeader(value = "Authorization", required = false) String authorizationHeader,
+            @PathVariable Long reservationId) {
+        Hospital hospital = callerResolver.requireHospital(authorizationHeader);
+        return ApiResponse.ok(reservationService.findPatientMedicalInfo(hospital, reservationId));
     }
 
     /** 예약 승인 → 최종 확정 */
