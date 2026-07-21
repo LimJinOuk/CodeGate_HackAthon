@@ -5,6 +5,7 @@ import com.example.codegate.reservation.domain.ReservationStatus;
 import jakarta.persistence.LockModeType;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
@@ -27,27 +28,45 @@ public interface ReservationRepository extends JpaRepository<Reservation, Long> 
     @Query("select r from Reservation r where r.id = :reservationId")
     Optional<Reservation> findByIdForUpdate(@Param("reservationId") Long reservationId);
 
+    /**
+     * 목록 조회 메서드에는 모두 {@code hospital} 엔티티 그래프를 건다.
+     * {@code ReservationResponse} 가 병원 이름 / 주소를 읽기 때문에, 페치 조인이 없으면
+     * 예약 1건당 병원 SELECT 가 한 번씩 더 나간다(N+1).
+     */
+    @EntityGraph(attributePaths = "hospital")
+    Optional<Reservation> findById(Long id);
+
+    @EntityGraph(attributePaths = "hospital")
     List<Reservation> findByPatient_IdOrderByReservationDateAscStartTimeAsc(Long patientId);
 
+    @EntityGraph(attributePaths = "hospital")
     Page<Reservation> findByPatient_Id(Long patientId, Pageable pageable);
 
+    @EntityGraph(attributePaths = "hospital")
     List<Reservation> findByPatient_IdAndStatusOrderByReservationDateAscStartTimeAsc(
             Long patientId, ReservationStatus status);
 
+    @EntityGraph(attributePaths = "hospital")
     Page<Reservation> findByPatient_IdAndStatus(Long patientId, ReservationStatus status, Pageable pageable);
 
+    @EntityGraph(attributePaths = "hospital")
     List<Reservation> findByHospital_IdOrderByReservationDateAscStartTimeAsc(Long hospitalId);
 
+    @EntityGraph(attributePaths = "hospital")
     Page<Reservation> findByHospital_Id(Long hospitalId, Pageable pageable);
 
+    @EntityGraph(attributePaths = "hospital")
     Page<Reservation> findByHospital_IdAndReservationDateBetween(
             Long hospitalId, LocalDate fromDate, LocalDate toDate, Pageable pageable);
 
+    @EntityGraph(attributePaths = "hospital")
     List<Reservation> findByHospital_IdAndStatusOrderByReservationDateAscStartTimeAsc(
             Long hospitalId, ReservationStatus status);
 
+    @EntityGraph(attributePaths = "hospital")
     Page<Reservation> findByHospital_IdAndStatus(Long hospitalId, ReservationStatus status, Pageable pageable);
 
+    @EntityGraph(attributePaths = "hospital")
     Page<Reservation> findByHospital_IdAndStatusAndReservationDateBetween(
             Long hospitalId, ReservationStatus status, LocalDate fromDate, LocalDate toDate, Pageable pageable);
 

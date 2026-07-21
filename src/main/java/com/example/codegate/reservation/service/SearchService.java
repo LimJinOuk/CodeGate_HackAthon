@@ -58,9 +58,10 @@ public class SearchService {
             throw ReservationErrors.invalidTimeRange();
         }
 
-        // 1) 주소에서 지역구를 해석해 대상 병원을 추린다
+        // 1) 대상 병원을 추린다. 지역구 조건은 DB 에서 거르고, 주소 문자열로만 매칭된
+        //    병원은 파서 기준과 일치하는지 여기서 한 번 더 확인한다.
         Map<Long, Hospital> hospitalById = new LinkedHashMap<>();
-        for (Hospital hospital : hospitalRepository.findAll()) {
+        for (Hospital hospital : hospitalRepository.findAllInDistrict(district, district.getLabel())) {
             if (profileParser.parseDistrict(hospital) == district) {
                 hospitalById.put(hospital.getId(), hospital);
             }

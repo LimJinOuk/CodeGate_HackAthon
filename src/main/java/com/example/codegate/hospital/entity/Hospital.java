@@ -51,7 +51,13 @@ public class Hospital {
     @Column(nullable = false)
     private String medicalSubjects;
 
-    @ElementCollection(fetch = FetchType.EAGER)
+    /**
+     * LAZY 인 이유 - EAGER 로 두면 병원을 여러 건 조회할 때마다 병원 1건당
+     * hospital_departments SELECT 가 한 번씩 더 나간다(N+1).
+     * 이 컬렉션이 필요한 조회는 {@code HospitalRepository.findByUserAccount} 처럼
+     * 엔티티 그래프로 함께 가져온다.
+     */
+    @ElementCollection(fetch = FetchType.LAZY)
     @CollectionTable(name = "hospital_departments", joinColumns = @JoinColumn(name = "hospital_id"))
     @Enumerated(EnumType.STRING)
     @Column(name = "department", nullable = false, length = 40, columnDefinition = "varchar(40)")
