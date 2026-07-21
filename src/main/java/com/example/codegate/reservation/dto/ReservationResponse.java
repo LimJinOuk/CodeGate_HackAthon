@@ -24,9 +24,14 @@ public record ReservationResponse(
         String patientName,
         String patientPhone,
         String symptom,
+        String timeZone,
         LocalDateTime requestedAt,
-        LocalDateTime decidedAt,
-        String decisionMessage
+        LocalDateTime approvedAt,
+        LocalDateTime rejectedAt,
+        LocalDateTime canceledAt,
+        LocalDateTime statusChangedAt,
+        String hospitalMemo,
+        String cancelReason
 ) {
     public static ReservationResponse from(Reservation r) {
         Hospital hospital = r.getHospital();
@@ -46,9 +51,14 @@ public record ReservationResponse(
                 r.getPatientName(),
                 r.getPatientPhone(),
                 r.getSymptom(),
+                "Asia/Seoul",
                 r.getRequestedAt(),
-                r.getDecidedAt(),
-                r.getDecisionMessage()
+                r.getApprovedAt(),
+                r.getRejectedAt(),
+                r.getCanceledAt(),
+                r.getStatusChangedAt(),
+                r.getHospitalMemo(),
+                r.getCancelReason()
         );
     }
 }

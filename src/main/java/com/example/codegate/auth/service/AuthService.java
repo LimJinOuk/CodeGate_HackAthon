@@ -11,6 +11,9 @@ import com.example.codegate.auth.dto.PatientKakaoSignupRequest;
 import com.example.codegate.global.BusinessException;
 import com.example.codegate.hospital.entity.Hospital;
 import com.example.codegate.hospital.repository.HospitalRepository;
+import com.example.codegate.reservation.domain.Department;
+import com.example.codegate.reservation.domain.District;
+import com.example.codegate.reservation.support.HospitalProfileParser;
 import com.example.codegate.user.entity.PatientProfile;
 import com.example.codegate.user.entity.UserAccount;
 import com.example.codegate.user.entity.UserRole;
@@ -30,6 +33,7 @@ public class AuthService {
     private final CryptoService cryptoService;
     private final PasswordService passwordService;
     private final JwtTokenService jwtTokenService;
+    private final HospitalProfileParser hospitalProfileParser;
 
     public AuthService(
             KakaoOAuthClient kakaoOAuthClient,
@@ -38,7 +42,8 @@ public class AuthService {
             HospitalRepository hospitalRepository,
             CryptoService cryptoService,
             PasswordService passwordService,
-            JwtTokenService jwtTokenService
+            JwtTokenService jwtTokenService,
+            HospitalProfileParser hospitalProfileParser
     ) {
         this.kakaoOAuthClient = kakaoOAuthClient;
         this.userAccountRepository = userAccountRepository;
@@ -47,6 +52,7 @@ public class AuthService {
         this.cryptoService = cryptoService;
         this.passwordService = passwordService;
         this.jwtTokenService = jwtTokenService;
+        this.hospitalProfileParser = hospitalProfileParser;
     }
 
     public KakaoLoginUrlResponse createKakaoLoginUrl(String redirectUri, String state) {
@@ -111,8 +117,10 @@ public class AuthService {
                 userAccount,
                 request.hospitalName(),
                 request.hospitalLocation(),
+                resolveDistrict(request.district(), request.hospitalLocation()),
                 request.availableTime(),
-                request.medicalSubjects()
+                subjectsText(request.medicalSubjects(), request.departments()),
+                resolveDepartments(request.departments(), request.medicalSubjects())
         ));
 
         return loginResponse(userAccount);
@@ -137,5 +145,49 @@ public class AuthService {
                 userAccount.getId(),
                 userAccount.getRole()
         );
+    }
+
+    private District resolveDistrict(String districtValue, String location) {
+        District district = District.fromLabel(districtValue);
+        if (district == null) {
+            district = hospitalProfileParser.parseDistrictText(location);
+        }
+        if (district == null) {
+            throw new BusinessException(HttpStatus.BAD_REQUEST, "DISTRICT_REQUIRED",
+                    "병원 지역구(district)는 필수이며 서울시 자치구 코드 또는 이름이어야 합니다.");
+        }
+        return district;
+    }
+
+    private java.util.Set<Department> resolveDepartments(java.util.List<String> departmentValues, String medicalSubjects) {
+        java.util.Set<Department> departments = new java.util.LinkedHashSet<>();
+        if (departmentValues != null) {
+            for (String value : departmentValues) {
+                Department department = Department.fromLabel(value);
+                if (department == null) {
+                    throw new BusinessException(HttpStatus.BAD_REQUEST, "UNKNOWN_DEPARTMENT",
+                            "존재하지 않는 진료과목입니다: " + value);
+                }
+                departments.add(department);
+            }
+        }
+        if (departments.isEmpty()) {
+            departments.addAll(hospitalProfileParser.parseDepartmentsText(medicalSubjects));
+        }
+        if (departments.isEmpty()) {
+            throw new BusinessException(HttpStatus.BAD_REQUEST, "DEPARTMENT_REQUIRED",
+                    "진료과목(departments)은 하나 이상 필요합니다.");
+        }
+        return departments;
+    }
+
+    private String subjectsText(String medicalSubjects, java.util.List<String> departments) {
+        if (medicalSubjects != null && !medicalSubjects.isBlank()) {
+            return medicalSubjects;
+        }
+        if (departments == null || departments.isEmpty()) {
+            return "";
+        }
+        return String.join(", ", departments);
     }
 }

@@ -9,6 +9,9 @@ import com.example.codegate.reservation.support.CallerResolver;
 import com.example.codegate.reservation.support.ReservationErrors;
 import com.example.codegate.user.entity.UserAccount;
 import jakarta.validation.Valid;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -50,11 +53,14 @@ public class PatientReservationController {
 
     /** 내 예약 목록 */
     @GetMapping
-    public ApiResponse<List<ReservationResponse>> myReservations(
+    public ApiResponse<Page<ReservationResponse>> myReservations(
             @RequestHeader(value = "Authorization", required = false) String authorizationHeader,
-            @RequestParam(required = false) String status) {
+            @RequestParam(required = false) String status,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
         UserAccount patient = callerResolver.requirePatient(authorizationHeader);
-        return ApiResponse.ok(reservationService.findMine(patient, parseStatus(status)));
+        return ApiResponse.ok(reservationService.findMine(patient, parseStatus(status),
+                pageRequest(page, size, Sort.by("reservationDate").ascending().and(Sort.by("startTime").ascending()))));
     }
 
     /** 내 예약 단건 조회 (승인 여부 확인) */
@@ -80,9 +86,19 @@ public class PatientReservationController {
             return null;
         }
         try {
-            return ReservationStatus.valueOf(value.trim().toUpperCase());
+            String normalized = value.trim().toUpperCase();
+            if ("CANCELED".equals(normalized)) {
+                return ReservationStatus.PATIENT_CANCELED;
+            }
+            return ReservationStatus.valueOf(normalized);
         } catch (IllegalArgumentException e) {
             throw ReservationErrors.invalidStatus(value);
         }
+    }
+
+    private PageRequest pageRequest(int page, int size, Sort sort) {
+        int normalizedPage = Math.max(page, 0);
+        int normalizedSize = Math.min(Math.max(size, 1), 100);
+        return PageRequest.of(normalizedPage, normalizedSize, sort);
     }
 }

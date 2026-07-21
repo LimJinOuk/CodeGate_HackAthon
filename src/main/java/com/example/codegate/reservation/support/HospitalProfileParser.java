@@ -34,7 +34,14 @@ public class HospitalProfileParser {
      * @return 매칭되는 자치구가 없으면 null (해당 병원은 지역구 검색에 잡히지 않는다)
      */
     public District parseDistrict(Hospital hospital) {
+        if (hospital.getDistrict() != null) {
+            return hospital.getDistrict();
+        }
         String location = hospital.getHospitalLocation();
+        return parseDistrictText(location);
+    }
+
+    public District parseDistrictText(String location) {
         if (location == null || location.isBlank()) {
             return null;
         }
@@ -50,8 +57,14 @@ public class HospitalProfileParser {
      * <p>{@link Department} 의 별칭까지 대조하며, 알 수 없는 항목은 건너뛴다.</p>
      */
     public Set<Department> parseDepartments(Hospital hospital) {
+        if (!hospital.getDepartments().isEmpty()) {
+            return hospital.getDepartments();
+        }
+        return parseDepartmentsText(hospital.getMedicalSubjects());
+    }
+
+    public Set<Department> parseDepartmentsText(String subjects) {
         Set<Department> result = new LinkedHashSet<>();
-        String subjects = hospital.getMedicalSubjects();
         if (subjects == null || subjects.isBlank()) {
             return result;
         }

@@ -13,6 +13,7 @@ public record SearchResponse(
         String selectedDepartment,
         String date,
         String timeRange,
+        String timeZone,
         List<String> allAvailableDepartments,
         int hospitalCount,
         int slotCount,

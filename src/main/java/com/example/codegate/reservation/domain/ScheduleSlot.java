@@ -12,7 +12,6 @@ import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
-import jakarta.persistence.UniqueConstraint;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -30,13 +29,7 @@ import java.time.LocalTime;
  * 병원이 거절하거나 사용자가 취소하면 자리를 반납한다.</p>
  */
 @Entity
-@Table(
-        name = "schedule_slots",
-        uniqueConstraints = @UniqueConstraint(
-                name = "uk_slot_hospital_department_datetime",
-                columnNames = {"hospital_id", "department", "slot_date", "start_time"}
-        )
-)
+@Table(name = "schedule_slots")
 public class ScheduleSlot {
 
     /** 1회 진료 시간 (시간 단위) */

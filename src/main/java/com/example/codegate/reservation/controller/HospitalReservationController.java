@@ -4,12 +4,16 @@ import com.example.codegate.global.ApiResponse;
 import com.example.codegate.hospital.entity.Hospital;
 import com.example.codegate.reservation.dto.DecisionRequest;
 import com.example.codegate.reservation.dto.ReservationResponse;
+import com.example.codegate.reservation.dto.SlotBulkCreateRequest;
 import com.example.codegate.reservation.dto.SlotCreateRequest;
 import com.example.codegate.reservation.dto.SlotResponse;
 import com.example.codegate.reservation.service.HospitalScheduleService;
 import com.example.codegate.reservation.service.ReservationService;
 import com.example.codegate.reservation.support.CallerResolver;
 import jakarta.validation.Valid;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -31,7 +35,7 @@ import java.util.List;
  * {@code Authorization: Bearer {accessToken}} 헤더가 필요하다.
  */
 @RestController
-@RequestMapping("/api/v1/hospital")
+@RequestMapping({"/api/v1/hospital", "/api/v1/hospitals/me"})
 public class HospitalReservationController {
 
     private final CallerResolver callerResolver;
@@ -50,12 +54,15 @@ public class HospitalReservationController {
 
     /** 우리 병원이 등록해 둔 진료 가능 시간대 조회 */
     @GetMapping("/slots")
-    public ApiResponse<List<SlotResponse>> slots(
+    public ApiResponse<Page<SlotResponse>> slots(
             @RequestHeader(value = "Authorization", required = false) String authorizationHeader,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date,
-            @RequestParam(required = false) String department) {
+            @RequestParam(required = false) String department,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
         Hospital hospital = callerResolver.requireHospital(authorizationHeader);
-        return ApiResponse.ok(scheduleService.findSlots(hospital, date, department));
+        return ApiResponse.ok(scheduleService.findSlots(hospital, date, department, pageRequest(page, size,
+                Sort.by("slotDate").ascending().and(Sort.by("startTime").ascending()))));
     }
 
     /** 진료 가능 시간대 추가 등록 (1시간 단위, 시작 시각은 정시) */
@@ -66,6 +73,16 @@ public class HospitalReservationController {
             @Valid @RequestBody SlotCreateRequest request) {
         Hospital hospital = callerResolver.requireHospital(authorizationHeader);
         return ApiResponse.ok(scheduleService.addSlot(hospital, request));
+    }
+
+    /** 진료 가능 시간대 일괄 등록 */
+    @PostMapping("/slots/bulk")
+    @ResponseStatus(HttpStatus.CREATED)
+    public ApiResponse<List<SlotResponse>> addSlots(
+            @RequestHeader(value = "Authorization", required = false) String authorizationHeader,
+            @Valid @RequestBody SlotBulkCreateRequest request) {
+        Hospital hospital = callerResolver.requireHospital(authorizationHeader);
+        return ApiResponse.ok(scheduleService.addSlots(hospital, request.toSlotCreateRequests()));
     }
 
     /** 진료 가능 시간대 삭제 */
@@ -82,12 +99,20 @@ public class HospitalReservationController {
 
     /** 접수된 예약 요청 목록 (status=REQUESTED 로 승인 대기 건만 조회) */
     @GetMapping("/reservations")
-    public ApiResponse<List<ReservationResponse>> reservations(
+    public ApiResponse<Page<ReservationResponse>> reservations(
             @RequestHeader(value = "Authorization", required = false) String authorizationHeader,
-            @RequestParam(required = false) String status) {
+            @RequestParam(required = false) String status,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate fromDate,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate toDate,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
         Hospital hospital = callerResolver.requireHospital(authorizationHeader);
-        return ApiResponse.ok(reservationService.findForHospital(hospital,
-                PatientReservationController.parseStatus(status)));
+        return ApiResponse.ok(reservationService.findForHospital(
+                hospital,
+                PatientReservationController.parseStatus(status),
+                fromDate,
+                toDate,
+                pageRequest(page, size, Sort.by("reservationDate").ascending().and(Sort.by("startTime").ascending()))));
     }
 
     /** 예약 승인 → 최종 확정 */
@@ -110,5 +135,22 @@ public class HospitalReservationController {
         Hospital hospital = callerResolver.requireHospital(authorizationHeader);
         return ApiResponse.ok(reservationService.reject(hospital, reservationId,
                 request == null ? null : request.message()));
+    }
+
+    /** 병원 취소 → 선점했던 자리 반납 */
+    @PostMapping("/reservations/{reservationId}/cancel")
+    public ApiResponse<ReservationResponse> cancelByHospital(
+            @RequestHeader(value = "Authorization", required = false) String authorizationHeader,
+            @PathVariable Long reservationId,
+            @Valid @RequestBody(required = false) DecisionRequest request) {
+        Hospital hospital = callerResolver.requireHospital(authorizationHeader);
+        return ApiResponse.ok(reservationService.cancelByHospital(hospital, reservationId,
+                request == null ? null : request.message()));
+    }
+
+    private PageRequest pageRequest(int page, int size, Sort sort) {
+        int normalizedPage = Math.max(page, 0);
+        int normalizedSize = Math.min(Math.max(size, 1), 100);
+        return PageRequest.of(normalizedPage, normalizedSize, sort);
     }
 }

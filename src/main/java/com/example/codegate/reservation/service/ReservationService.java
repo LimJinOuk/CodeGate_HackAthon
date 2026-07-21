@@ -11,10 +11,13 @@ import com.example.codegate.reservation.repository.ScheduleSlotRepository;
 import com.example.codegate.reservation.support.ReservationErrors;
 import com.example.codegate.user.entity.UserAccount;
 import com.example.codegate.user.repository.UserAccountRepository;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Set;
 
@@ -82,6 +85,15 @@ public class ReservationService {
         return reservations.stream().map(ReservationResponse::from).toList();
     }
 
+    /** 사용자의 예약 목록 (페이지네이션) */
+    @Transactional(readOnly = true)
+    public Page<ReservationResponse> findMine(UserAccount patient, ReservationStatus status, Pageable pageable) {
+        Page<Reservation> reservations = (status == null)
+                ? reservationRepository.findByPatient_Id(patient.getId(), pageable)
+                : reservationRepository.findByPatient_IdAndStatus(patient.getId(), status, pageable);
+        return reservations.map(ReservationResponse::from);
+    }
+
     /** 예약 단건 조회 (본인 것만) */
     @Transactional(readOnly = true)
     public ReservationResponse findMineById(UserAccount patient, Long reservationId) {
@@ -95,7 +107,9 @@ public class ReservationService {
         if (!reservation.getStatus().isActive()) {
             throw ReservationErrors.reservationAlreadyClosed(reservation.getStatus().getLabel());
         }
-        reservation.cancel(LocalDateTime.now());
+        LocalDateTime now = LocalDateTime.now();
+        requireCancelableBeforeStart(reservation, now);
+        reservation.cancelByPatient("사용자가 예약을 취소했습니다.", now);
         reservation.getSlot().release();
         return ReservationResponse.from(reservation);
     }
@@ -110,6 +124,36 @@ public class ReservationService {
                 : reservationRepository.findByHospital_IdAndStatusOrderByReservationDateAscStartTimeAsc(
                         hospital.getId(), status);
         return reservations.stream().map(ReservationResponse::from).toList();
+    }
+
+    /** 병원이 받은 예약 요청 목록 (페이지네이션). */
+    @Transactional(readOnly = true)
+    public Page<ReservationResponse> findForHospital(Hospital hospital, ReservationStatus status, Pageable pageable) {
+        Page<Reservation> reservations = (status == null)
+                ? reservationRepository.findByHospital_Id(hospital.getId(), pageable)
+                : reservationRepository.findByHospital_IdAndStatus(hospital.getId(), status, pageable);
+        return reservations.map(ReservationResponse::from);
+    }
+
+    /** 병원이 받은 예약 요청 목록 (페이지네이션 + 날짜 범위). */
+    @Transactional(readOnly = true)
+    public Page<ReservationResponse> findForHospital(Hospital hospital, ReservationStatus status,
+                                                     LocalDate fromDate, LocalDate toDate, Pageable pageable) {
+        if (fromDate == null && toDate == null) {
+            return findForHospital(hospital, status, pageable);
+        }
+
+        LocalDate from = fromDate == null ? LocalDate.of(1900, 1, 1) : fromDate;
+        LocalDate to = toDate == null ? LocalDate.of(9999, 12, 31) : toDate;
+        if (to.isBefore(from)) {
+            throw ReservationErrors.invalidDateRange();
+        }
+
+        Page<Reservation> reservations = (status == null)
+                ? reservationRepository.findByHospital_IdAndReservationDateBetween(hospital.getId(), from, to, pageable)
+                : reservationRepository.findByHospital_IdAndStatusAndReservationDateBetween(
+                        hospital.getId(), status, from, to, pageable);
+        return reservations.map(ReservationResponse::from);
     }
 
     /** 병원 승인 → 예약 최종 확정 */
@@ -139,11 +183,35 @@ public class ReservationService {
         return ReservationResponse.from(reservation);
     }
 
+    /** 병원 취소. 승인 대기 / 확정 상태 모두 취소 가능하며 슬롯 자리를 반납한다. */
+    @Transactional
+    public ReservationResponse cancelByHospital(Hospital hospital, Long reservationId, String reason) {
+        Reservation reservation = getHospitalReservationForUpdate(hospital, reservationId);
+        if (!reservation.getStatus().isActive()) {
+            throw ReservationErrors.reservationAlreadyClosed(reservation.getStatus().getLabel());
+        }
+        LocalDateTime now = LocalDateTime.now();
+        requireCancelableBeforeStart(reservation, now);
+
+        String text = (reason == null || reason.isBlank())
+                ? "병원 사정으로 예약이 취소되었습니다."
+                : reason;
+        reservation.cancelByHospital(text, now);
+        reservation.getSlot().release();
+        return ReservationResponse.from(reservation);
+    }
+
     // ------------------------------------------------------------------ 내부용
 
     private void requirePending(Reservation reservation) {
         if (reservation.getStatus() != ReservationStatus.REQUESTED) {
             throw ReservationErrors.reservationNotPending(reservation.getStatus().getLabel());
+        }
+    }
+
+    private void requireCancelableBeforeStart(Reservation reservation, LocalDateTime now) {
+        if (!reservation.startsAt().isAfter(now)) {
+            throw ReservationErrors.reservationAlreadyStarted();
         }
     }
 

@@ -3,6 +3,8 @@ package com.example.codegate.reservation.repository;
 import com.example.codegate.reservation.domain.Reservation;
 import com.example.codegate.reservation.domain.ReservationStatus;
 import jakarta.persistence.LockModeType;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
@@ -27,13 +29,27 @@ public interface ReservationRepository extends JpaRepository<Reservation, Long> 
 
     List<Reservation> findByPatient_IdOrderByReservationDateAscStartTimeAsc(Long patientId);
 
+    Page<Reservation> findByPatient_Id(Long patientId, Pageable pageable);
+
     List<Reservation> findByPatient_IdAndStatusOrderByReservationDateAscStartTimeAsc(
             Long patientId, ReservationStatus status);
 
+    Page<Reservation> findByPatient_IdAndStatus(Long patientId, ReservationStatus status, Pageable pageable);
+
     List<Reservation> findByHospital_IdOrderByReservationDateAscStartTimeAsc(Long hospitalId);
+
+    Page<Reservation> findByHospital_Id(Long hospitalId, Pageable pageable);
+
+    Page<Reservation> findByHospital_IdAndReservationDateBetween(
+            Long hospitalId, LocalDate fromDate, LocalDate toDate, Pageable pageable);
 
     List<Reservation> findByHospital_IdAndStatusOrderByReservationDateAscStartTimeAsc(
             Long hospitalId, ReservationStatus status);
+
+    Page<Reservation> findByHospital_IdAndStatus(Long hospitalId, ReservationStatus status, Pageable pageable);
+
+    Page<Reservation> findByHospital_IdAndStatusAndReservationDateBetween(
+            Long hospitalId, ReservationStatus status, LocalDate fromDate, LocalDate toDate, Pageable pageable);
 
     /** 같은 사용자가 같은 시간대에 이미 진행 중(승인대기/확정)인 예약을 갖고 있는지 */
     boolean existsByPatient_IdAndReservationDateAndStartTimeAndStatusIn(

@@ -20,6 +20,7 @@ public record SlotResponse(
         String dayOfWeek,
         @JsonFormat(pattern = "HH:mm") LocalTime startTime,
         @JsonFormat(pattern = "HH:mm") LocalTime endTime,
+        String timeZone,
         boolean reserved,
         boolean available
 ) {
@@ -31,6 +32,7 @@ public record SlotResponse(
                 slot.getSlotDate().getDayOfWeek().getDisplayName(TextStyle.SHORT, Locale.KOREAN),
                 slot.getStartTime(),
                 slot.getEndTime(),
+                "Asia/Seoul",
                 slot.isReserved(),
                 slot.isAvailable(now)
         );

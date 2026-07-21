@@ -115,6 +115,7 @@ public class SearchService {
                 department == null ? null : department.getLabel(),
                 date == null ? null : date.toString(),
                 formatTimeRange(fromTime, toTime),
+                "Asia/Seoul",
                 allAvailableDepartments,
                 results.size(),
                 matched.size(),
@@ -162,6 +163,7 @@ public class SearchService {
                 department == null ? null : department.getLabel(),
                 date == null ? null : date.toString(),
                 formatTimeRange(fromTime, toTime),
+                "Asia/Seoul",
                 List.of(), 0, 0, List.of());
     }
 

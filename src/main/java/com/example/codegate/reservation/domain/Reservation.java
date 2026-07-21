@@ -71,10 +71,19 @@ public class Reservation {
     @Column(nullable = false)
     private LocalDateTime requestedAt;
 
-    private LocalDateTime decidedAt;
+    private LocalDateTime approvedAt;
 
     @Column(length = 200)
-    private String decisionMessage;
+    private String hospitalMemo;
+
+    private LocalDateTime rejectedAt;
+
+    private LocalDateTime canceledAt;
+
+    @Column(length = 200)
+    private String cancelReason;
+
+    private LocalDateTime statusChangedAt;
 
     protected Reservation() {
     }
@@ -92,6 +101,7 @@ public class Reservation {
         this.patientPhone = patientPhone;
         this.symptom = symptom;
         this.requestedAt = requestedAt;
+        this.statusChangedAt = requestedAt;
         this.status = ReservationStatus.REQUESTED;
     }
 
@@ -135,6 +145,10 @@ public class Reservation {
         return startTime.plusHours(ScheduleSlot.DURATION_HOURS);
     }
 
+    public LocalDateTime startsAt() {
+        return LocalDateTime.of(reservationDate, startTime);
+    }
+
     public String getPatientName() {
         return patientName;
     }
@@ -155,29 +169,55 @@ public class Reservation {
         return requestedAt;
     }
 
-    public LocalDateTime getDecidedAt() {
-        return decidedAt;
+    public LocalDateTime getApprovedAt() {
+        return approvedAt;
     }
 
-    public String getDecisionMessage() {
-        return decisionMessage;
+    public String getHospitalMemo() {
+        return hospitalMemo;
+    }
+
+    public LocalDateTime getRejectedAt() {
+        return rejectedAt;
+    }
+
+    public LocalDateTime getCanceledAt() {
+        return canceledAt;
+    }
+
+    public String getCancelReason() {
+        return cancelReason;
+    }
+
+    public LocalDateTime getStatusChangedAt() {
+        return statusChangedAt;
     }
 
     public void approve(String message, LocalDateTime now) {
         this.status = ReservationStatus.APPROVED;
-        this.decidedAt = now;
-        this.decisionMessage = message;
+        this.approvedAt = now;
+        this.hospitalMemo = message;
+        this.statusChangedAt = now;
     }
 
     public void reject(String reason, LocalDateTime now) {
         this.status = ReservationStatus.REJECTED;
-        this.decidedAt = now;
-        this.decisionMessage = reason;
+        this.rejectedAt = now;
+        this.hospitalMemo = reason;
+        this.statusChangedAt = now;
     }
 
-    public void cancel(LocalDateTime now) {
-        this.status = ReservationStatus.CANCELED;
-        this.decidedAt = now;
-        this.decisionMessage = "사용자가 예약을 취소했습니다.";
+    public void cancelByPatient(String reason, LocalDateTime now) {
+        this.status = ReservationStatus.PATIENT_CANCELED;
+        this.canceledAt = now;
+        this.cancelReason = reason;
+        this.statusChangedAt = now;
+    }
+
+    public void cancelByHospital(String reason, LocalDateTime now) {
+        this.status = ReservationStatus.HOSPITAL_CANCELED;
+        this.canceledAt = now;
+        this.cancelReason = reason;
+        this.statusChangedAt = now;
     }
 }

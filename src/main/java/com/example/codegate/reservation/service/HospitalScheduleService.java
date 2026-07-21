@@ -9,6 +9,8 @@ import com.example.codegate.reservation.repository.ReservationRepository;
 import com.example.codegate.reservation.repository.ScheduleSlotRepository;
 import com.example.codegate.reservation.support.HospitalProfileParser;
 import com.example.codegate.reservation.support.ReservationErrors;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -47,6 +49,25 @@ public class HospitalScheduleService {
                 .toList();
     }
 
+    /** 우리 병원이 등록한 시간대 목록 (페이지네이션) */
+    @Transactional(readOnly = true)
+    public Page<SlotResponse> findSlots(Hospital hospital, LocalDate date, String departmentParam, Pageable pageable) {
+        Department department = parseDepartmentOrNull(departmentParam);
+        LocalDateTime now = LocalDateTime.now();
+        Page<ScheduleSlot> slots;
+        if (date != null && department != null) {
+            slots = slotRepository.findByHospital_IdAndSlotDateAndDepartment(
+                    hospital.getId(), date, department, pageable);
+        } else if (date != null) {
+            slots = slotRepository.findByHospital_IdAndSlotDate(hospital.getId(), date, pageable);
+        } else if (department != null) {
+            slots = slotRepository.findByHospital_IdAndDepartment(hospital.getId(), department, pageable);
+        } else {
+            slots = slotRepository.findByHospital_Id(hospital.getId(), pageable);
+        }
+        return slots.map(s -> SlotResponse.from(s, now));
+    }
+
     /** 시간대 신규 등록. 시작 시각은 정시여야 하며 종료 시각은 +1시간으로 자동 설정된다. */
     @Transactional
     public SlotResponse addSlot(Hospital hospital, SlotCreateRequest request) {
@@ -63,15 +84,23 @@ public class HospitalScheduleService {
         if (LocalDateTime.of(request.date(), request.startTime()).isBefore(LocalDateTime.now())) {
             throw ReservationErrors.slotPast();
         }
-        if (slotRepository.existsByHospital_IdAndDepartmentAndSlotDateAndStartTime(
-                hospital.getId(), department, request.date(), request.startTime())) {
+        if (slotRepository.existsByHospital_IdAndSlotDateAndStartTime(
+                hospital.getId(), request.date(), request.startTime())) {
             throw ReservationErrors.slotDuplicated(
-                    request.date() + " " + request.startTime() + " " + department.getLabel());
+                    request.date() + " " + request.startTime());
         }
 
         ScheduleSlot slot = slotRepository.save(
                 new ScheduleSlot(hospital, department, request.date(), request.startTime()));
         return SlotResponse.from(slot, LocalDateTime.now());
+    }
+
+    /** 시간대 일괄 등록. 하나라도 유효하지 않으면 전체 트랜잭션을 롤백한다. */
+    @Transactional
+    public List<SlotResponse> addSlots(Hospital hospital, List<SlotCreateRequest> requests) {
+        return requests.stream()
+                .map(request -> addSlot(hospital, request))
+                .toList();
     }
 
     /** 시간대 삭제. 예약 이력이 있으면 거부한다. */

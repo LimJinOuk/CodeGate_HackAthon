@@ -36,9 +36,14 @@ public final class ReservationErrors {
                 "종료 시간은 시작 시간보다 늦어야 합니다.");
     }
 
+    public static BusinessException invalidDateRange() {
+        return new BusinessException(HttpStatus.BAD_REQUEST, "INVALID_DATE_RANGE",
+                "종료 날짜는 시작 날짜보다 빠를 수 없습니다.");
+    }
+
     public static BusinessException invalidStatus(String value) {
         return new BusinessException(HttpStatus.BAD_REQUEST, "INVALID_PARAMETER",
-                "status 는 REQUESTED, APPROVED, REJECTED, CANCELED 중 하나여야 합니다. (입력값: " + value + ")");
+                "status 는 REQUESTED, APPROVED, REJECTED, PATIENT_CANCELED, HOSPITAL_CANCELED 중 하나여야 합니다. (입력값: " + value + ")");
     }
 
     // ------------------------------------------------------------------ 예약
@@ -78,6 +83,11 @@ public final class ReservationErrors {
                 "이미 " + currentLabel + " 상태인 예약입니다.");
     }
 
+    public static BusinessException reservationAlreadyStarted() {
+        return new BusinessException(HttpStatus.CONFLICT, "RESERVATION_ALREADY_STARTED",
+                "예약 시작 시간이 지난 예약은 취소할 수 없습니다.");
+    }
+
     public static BusinessException notOwnReservation() {
         return new BusinessException(HttpStatus.FORBIDDEN, "FORBIDDEN",
                 "본인의 예약만 조회/취소할 수 있습니다.");
@@ -102,7 +112,7 @@ public final class ReservationErrors {
 
     public static BusinessException slotDuplicated(String detail) {
         return new BusinessException(HttpStatus.CONFLICT, "SLOT_DUPLICATED",
-                detail + " 시간대는 이미 등록되어 있습니다.");
+                detail + " 시간대는 이미 등록되어 있습니다. 한 병원은 같은 시간에 하나의 슬롯만 등록할 수 있습니다.");
     }
 
     public static BusinessException slotHasReservation() {
