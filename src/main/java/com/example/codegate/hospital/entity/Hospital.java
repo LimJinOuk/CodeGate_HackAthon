@@ -41,7 +41,7 @@ public class Hospital {
     private String hospitalLocation;
 
     @Enumerated(EnumType.STRING)
-    @Column(length = 40)
+    @Column(length = 40, columnDefinition = "varchar(40)")
     private District district;
 
     @Column(nullable = false, length = 255)
@@ -54,7 +54,7 @@ public class Hospital {
     @ElementCollection(fetch = FetchType.EAGER)
     @CollectionTable(name = "hospital_departments", joinColumns = @JoinColumn(name = "hospital_id"))
     @Enumerated(EnumType.STRING)
-    @Column(name = "department", nullable = false, length = 40)
+    @Column(name = "department", nullable = false, length = 40, columnDefinition = "varchar(40)")
     private Set<Department> departments = new LinkedHashSet<>();
 
     @Column(nullable = false)

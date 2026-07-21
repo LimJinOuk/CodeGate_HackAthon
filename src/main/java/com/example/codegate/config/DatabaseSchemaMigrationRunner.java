@@ -45,6 +45,7 @@ public class DatabaseSchemaMigrationRunner implements ApplicationRunner {
             return;
         }
 
+        normalizeLegacyEnumValues();
         migrateScheduleSlotUniqueConstraint();
         backfillHospitalDistricts();
         backfillHospitalDepartments();
@@ -77,16 +78,96 @@ public class DatabaseSchemaMigrationRunner implements ApplicationRunner {
                             + "Resolve duplicates before applying uk_slot_hospital_datetime.");
         }
 
-        String oldIndexName = findIndexName("schedule_slots", OLD_SLOT_UNIQUE_INDEX);
-        if (oldIndexName != null) {
-            jdbcTemplate.execute("alter table schedule_slots drop index " + oldIndexName);
-        }
         if (findIndexName("schedule_slots", NEW_SLOT_UNIQUE_INDEX) == null) {
             jdbcTemplate.execute("""
                     alter table schedule_slots
-                    add constraint uk_slot_hospital_datetime unique (hospital_id, slot_date, start_time)
-                    """);
+                    add constraint %s unique (hospital_id, slot_date, start_time)
+                    """.formatted(quoteIdentifier(NEW_SLOT_UNIQUE_INDEX)));
         }
+
+        String oldIndexName = findIndexName("schedule_slots", OLD_SLOT_UNIQUE_INDEX);
+        if (oldIndexName != null) {
+            jdbcTemplate.execute("alter table schedule_slots drop index " + quoteIdentifier(oldIndexName));
+        }
+    }
+
+    private void normalizeLegacyEnumValues() {
+        normalizeDepartmentColumn("schedule_slots", "department");
+        normalizeDepartmentColumn("reservations", "department");
+        normalizeDepartmentColumn("hospital_departments", "department");
+        normalizeDistrictColumn("hospitals", "district");
+    }
+
+    private void normalizeDepartmentColumn(String tableName, String columnName) {
+        if (!tableExists(tableName) || !columnExists(tableName, columnName)) {
+            return;
+        }
+
+        for (String value : distinctNonNullValues(tableName, columnName)) {
+            Department department = Department.fromLabel(value);
+            if (department == null) {
+                throw new IllegalStateException(
+                        tableName + "." + columnName + " contains unsupported department value: " + value);
+            }
+            if (!department.name().equals(value)) {
+                updateEnumValue(tableName, columnName, value, department.name());
+            }
+        }
+    }
+
+    private void normalizeDistrictColumn(String tableName, String columnName) {
+        if (!tableExists(tableName) || !columnExists(tableName, columnName)) {
+            return;
+        }
+
+        for (String value : distinctNonBlankValues(tableName, columnName)) {
+            District district = District.fromLabel(value);
+            if (district == null) {
+                throw new IllegalStateException(
+                        tableName + "." + columnName + " contains unsupported district value: " + value);
+            }
+            if (!district.name().equals(value)) {
+                updateEnumValue(tableName, columnName, value, district.name());
+            }
+        }
+    }
+
+    private List<String> distinctNonNullValues(String tableName, String columnName) {
+        return jdbcTemplate.queryForList("""
+                select distinct %s
+                from %s
+                where %s is not null
+                """.formatted(
+                quoteIdentifier(columnName),
+                quoteIdentifier(tableName),
+                quoteIdentifier(columnName)
+        ), String.class);
+    }
+
+    private List<String> distinctNonBlankValues(String tableName, String columnName) {
+        return jdbcTemplate.queryForList("""
+                select distinct %s
+                from %s
+                where %s is not null
+                  and %s <> ''
+                """.formatted(
+                quoteIdentifier(columnName),
+                quoteIdentifier(tableName),
+                quoteIdentifier(columnName),
+                quoteIdentifier(columnName)
+        ), String.class);
+    }
+
+    private void updateEnumValue(String tableName, String columnName, String fromValue, String toValue) {
+        jdbcTemplate.update("""
+                update %s
+                set %s = ?
+                where %s = ?
+                """.formatted(
+                quoteIdentifier(tableName),
+                quoteIdentifier(columnName),
+                quoteIdentifier(columnName)
+        ), toValue, fromValue);
     }
 
     private void backfillHospitalDistricts() {
@@ -241,6 +322,10 @@ public class DatabaseSchemaMigrationRunner implements ApplicationRunner {
                   and lower(index_name) = lower(?)
                 """, String.class, tableName, indexName);
         return names.isEmpty() ? null : names.get(0);
+    }
+
+    private String quoteIdentifier(String identifier) {
+        return "`" + identifier.replace("`", "``") + "`";
     }
 
     private record HospitalDistrictRow(Long hospitalId, String hospitalLocation) {

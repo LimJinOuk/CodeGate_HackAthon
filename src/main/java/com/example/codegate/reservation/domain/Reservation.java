@@ -46,7 +46,7 @@ public class Reservation {
     private UserAccount patient;
 
     @Enumerated(EnumType.STRING)
-    @Column(nullable = false, length = 40)
+    @Column(nullable = false, length = 40, columnDefinition = "varchar(40)")
     private Department department;
 
     @Column(name = "reservation_date", nullable = false)
@@ -65,7 +65,7 @@ public class Reservation {
     private String symptom;
 
     @Enumerated(EnumType.STRING)
-    @Column(nullable = false, length = 20)
+    @Column(nullable = false, length = 20, columnDefinition = "varchar(20)")
     private ReservationStatus status;
 
     @Column(nullable = false)

@@ -11,9 +11,9 @@ import java.util.List;
  */
 public enum Department {
 
-    HEALTH_CHECKUP("종합건강검진", "종합검진", "건강검진", "검진"),
-    INTERNAL_MEDICINE("내과"),
-    FAMILY_MEDICINE("가정의학과", "가정의학"),
+    HEALTH_CHECKUP("종합건강검진", "종합검진", "건강검진", "검진", "혈액검사", "BLOOD_TEST"),
+    INTERNAL_MEDICINE("내과", "소화기내과", "위내시경", "대장내시경", "GASTROENTEROLOGY", "ENDOSCOPY"),
+    FAMILY_MEDICINE("가정의학과", "가정의학", "예방접종", "VACCINATION"),
     SURGERY("외과", "일반외과"),
     ORTHOPEDICS("정형외과"),
     NEUROLOGY("신경과", "신경외과"),
@@ -24,7 +24,7 @@ public enum Department {
     OBGYN("산부인과"),
     PEDIATRICS("소아청소년과", "소아과"),
     UROLOGY("비뇨의학과", "비뇨기과"),
-    RADIOLOGY("영상의학과", "영상의학", "방사선과");
+    RADIOLOGY("영상의학과", "영상의학", "방사선과", "CT", "MRI", "X-Ray", "X_RAY", "XRAY");
 
     private final String label;
     private final List<String> aliases;
