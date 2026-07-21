@@ -10,6 +10,7 @@ import com.example.codegate.reservation.repository.ReservationRepository;
 import com.example.codegate.reservation.repository.ScheduleSlotRepository;
 import com.example.codegate.reservation.support.ReservationErrors;
 import com.example.codegate.user.entity.UserAccount;
+import com.example.codegate.user.repository.UserAccountRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -28,11 +29,14 @@ public class ReservationService {
 
     private final ReservationRepository reservationRepository;
     private final ScheduleSlotRepository slotRepository;
+    private final UserAccountRepository userAccountRepository;
 
     public ReservationService(ReservationRepository reservationRepository,
-                              ScheduleSlotRepository slotRepository) {
+                              ScheduleSlotRepository slotRepository,
+                              UserAccountRepository userAccountRepository) {
         this.reservationRepository = reservationRepository;
         this.slotRepository = slotRepository;
+        this.userAccountRepository = userAccountRepository;
     }
 
     // ------------------------------------------------------------------ 사용자
@@ -40,15 +44,17 @@ public class ReservationService {
     /** 예약 요청. 성공하면 해당 1시간 슬롯을 선점하고 REQUESTED 상태로 생성된다. */
     @Transactional
     public ReservationResponse request(UserAccount patient, ReservationCreateRequest request) {
-        ScheduleSlot slot = slotRepository.findById(request.slotId())
+        UserAccount lockedPatient = userAccountRepository.findByIdForUpdate(patient.getId())
+                .orElseThrow(ReservationErrors::userNotFound);
+        ScheduleSlot slot = slotRepository.findByIdForUpdate(request.slotId())
                 .orElseThrow(() -> ReservationErrors.slotNotFound(request.slotId()));
 
         LocalDateTime now = LocalDateTime.now();
         if (slot.isPast(now)) {
             throw ReservationErrors.slotPast();
         }
-        if (reservationRepository.existsBySlot_IdAndPatient_IdAndStatusIn(
-                slot.getId(), patient.getId(), ACTIVE_STATUSES)) {
+        if (reservationRepository.existsByPatient_IdAndReservationDateAndStartTimeAndStatusIn(
+                lockedPatient.getId(), slot.getSlotDate(), slot.getStartTime(), ACTIVE_STATUSES)) {
             throw ReservationErrors.duplicateReservation();
         }
         if (!slot.reserve()) {
@@ -57,7 +63,7 @@ public class ReservationService {
 
         Reservation reservation = new Reservation(
                 slot,
-                patient,
+                lockedPatient,
                 request.patientName(),
                 request.patientPhone(),
                 request.symptom(),
@@ -85,7 +91,7 @@ public class ReservationService {
     /** 사용자 취소. 승인 대기 / 확정 상태 모두 취소 가능하며 슬롯 자리를 반납한다. */
     @Transactional
     public ReservationResponse cancel(UserAccount patient, Long reservationId) {
-        Reservation reservation = getOwnReservation(patient, reservationId);
+        Reservation reservation = getOwnReservationForUpdate(patient, reservationId);
         if (!reservation.getStatus().isActive()) {
             throw ReservationErrors.reservationAlreadyClosed(reservation.getStatus().getLabel());
         }
@@ -109,7 +115,7 @@ public class ReservationService {
     /** 병원 승인 → 예약 최종 확정 */
     @Transactional
     public ReservationResponse approve(Hospital hospital, Long reservationId, String message) {
-        Reservation reservation = getHospitalReservation(hospital, reservationId);
+        Reservation reservation = getHospitalReservationForUpdate(hospital, reservationId);
         requirePending(reservation);
 
         String text = (message == null || message.isBlank())
@@ -122,7 +128,7 @@ public class ReservationService {
     /** 병원 거절 → 선점했던 슬롯 자리 반납 */
     @Transactional
     public ReservationResponse reject(Hospital hospital, Long reservationId, String reason) {
-        Reservation reservation = getHospitalReservation(hospital, reservationId);
+        Reservation reservation = getHospitalReservationForUpdate(hospital, reservationId);
         requirePending(reservation);
 
         String text = (reason == null || reason.isBlank())
@@ -150,8 +156,26 @@ public class ReservationService {
         return reservation;
     }
 
+    private Reservation getOwnReservationForUpdate(UserAccount patient, Long reservationId) {
+        Reservation reservation = reservationRepository.findByIdForUpdate(reservationId)
+                .orElseThrow(ReservationErrors::reservationNotFound);
+        if (!reservation.getPatientId().equals(patient.getId())) {
+            throw ReservationErrors.notOwnReservation();
+        }
+        return reservation;
+    }
+
     private Reservation getHospitalReservation(Hospital hospital, Long reservationId) {
         Reservation reservation = reservationRepository.findById(reservationId)
+                .orElseThrow(ReservationErrors::reservationNotFound);
+        if (!reservation.getHospitalId().equals(hospital.getId())) {
+            throw ReservationErrors.notOwnHospitalReservation();
+        }
+        return reservation;
+    }
+
+    private Reservation getHospitalReservationForUpdate(Hospital hospital, Long reservationId) {
+        Reservation reservation = reservationRepository.findByIdForUpdate(reservationId)
                 .orElseThrow(ReservationErrors::reservationNotFound);
         if (!reservation.getHospitalId().equals(hospital.getId())) {
             throw ReservationErrors.notOwnHospitalReservation();

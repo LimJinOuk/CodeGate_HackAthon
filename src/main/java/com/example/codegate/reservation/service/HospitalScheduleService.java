@@ -60,6 +60,9 @@ public class HospitalScheduleService {
         if (request.startTime().getMinute() != 0 || request.startTime().getSecond() != 0) {
             throw ReservationErrors.slotNotOnTheHour(request.startTime());
         }
+        if (LocalDateTime.of(request.date(), request.startTime()).isBefore(LocalDateTime.now())) {
+            throw ReservationErrors.slotPast();
+        }
         if (slotRepository.existsByHospital_IdAndDepartmentAndSlotDateAndStartTime(
                 hospital.getId(), department, request.date(), request.startTime())) {
             throw ReservationErrors.slotDuplicated(

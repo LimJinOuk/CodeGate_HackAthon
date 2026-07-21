@@ -60,7 +60,7 @@ public final class ReservationErrors {
 
     public static BusinessException duplicateReservation() {
         return new BusinessException(HttpStatus.CONFLICT, "DUPLICATE_RESERVATION",
-                "동일한 시간대에 이미 진행 중인 예약이 있습니다.");
+                "동일한 날짜와 시간대에 이미 진행 중인 예약이 있습니다.");
     }
 
     public static BusinessException reservationNotFound() {

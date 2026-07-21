@@ -54,7 +54,7 @@ public class SearchService {
         District district = requireDistrict(districtParam);
         Department department = parseDepartmentOrNull(departmentParam);
 
-        if (fromTime != null && toTime != null && toTime.isBefore(fromTime)) {
+        if (fromTime != null && toTime != null && !toTime.isAfter(fromTime)) {
             throw ReservationErrors.invalidTimeRange();
         }
 
@@ -72,7 +72,10 @@ public class SearchService {
         // 2) 지역구 + 날짜 + 시간 조건만 적용한 "예약 가능 슬롯"
         LocalDateTime now = LocalDateTime.now();
         List<ScheduleSlot> slotsBeforeDepartmentFilter = slotRepository.findAvailableSlots(
-                hospitalById.keySet(), now.toLocalDate(), now.toLocalTime(), date, fromTime, toTime);
+                        hospitalById.keySet(), now.toLocalDate(), now.toLocalTime(), date, fromTime, toTime)
+                .stream()
+                .filter(s -> toTime == null || !s.getEndTime().isAfter(toTime))
+                .toList();
 
         // 진료과 드롭다운을 선택하지 않았을 때 노출할 "가능 진료과" 전체 목록
         List<String> allAvailableDepartments = distinctDepartmentLabels(slotsBeforeDepartmentFilter);
