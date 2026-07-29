@@ -1,5 +1,5 @@
 # CodeGate_HackAthon
-2026 삼성역에서 개최된 한컴 이노스트림 주최 코트게이트 AI 해커톤 백엔드 레포지토리
+2026 삼성역에서 개최된 CodeGate주최 , 한컴 이노스트림 후원한 코트게이트 AI Start-Up 해커톤 백엔드 레포지토리
 
 <br/>
 <h3>Team Mate</h3>
