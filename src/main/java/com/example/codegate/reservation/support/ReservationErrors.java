@@ -112,7 +112,7 @@ public final class ReservationErrors {
 
     public static BusinessException slotDuplicated(String detail) {
         return new BusinessException(HttpStatus.CONFLICT, "SLOT_DUPLICATED",
-                detail + " 시간대는 이미 등록되어 있습니다. 한 병원은 같은 시간에 하나의 슬롯만 등록할 수 있습니다.");
+                "등록되었습니다.");
     }
 
     public static BusinessException slotHasReservation() {
